@@ -2,6 +2,7 @@ package com.example.apachekafka.kafkaConsumer.config;
 
 import java.util.List;
 
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.TopicPartition;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,10 +14,13 @@ import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.listener.CommonErrorHandler;
+import org.springframework.kafka.listener.ConsumerRecordRecoverer;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.support.ExponentialBackOffWithMaxRetries;
 import org.springframework.util.backoff.FixedBackOff;
+
+import com.example.apachekafka.kafkaConsumer.service.FailureService;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -24,8 +28,14 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class LibraryEventConsumerConfig {
 	
+	public static final String RETRY = "RETRY";
+    public static final String DEAD = "DEAD";
+	
 	@Autowired
 	KafkaTemplate kafkaTemplate;
+	
+	@Autowired
+	FailureService failureService;
 	
 	@Value("${topics.retry:library-events.RETRY}")
 	private String retryTopic;
@@ -61,6 +71,20 @@ public class LibraryEventConsumerConfig {
 		return null;
 		
 	}
+	
+	ConsumerRecordRecoverer consumerRecordRecoverer = (record, exception) -> {
+        log.error("Exception is : {} Failed Record : {} ", exception, record);
+        if (exception.getCause() instanceof RecoverableDataAccessException) {
+            log.info("Inside the recoverable logic");
+            //Add any Recovery Code here.
+            failureService.saveFailedRecord((ConsumerRecord<Integer, String>) record, exception, RETRY);
+
+        } else {
+            log.info("Inside the non recoverable logic and skipping the record : {}", record);
+
+        };
+    };
+
 
 	public DefaultErrorHandler errorHandler() {
 		// TODO Auto-generated method stub
@@ -73,7 +97,12 @@ public class LibraryEventConsumerConfig {
 		expBackOff.setMultiplier(2.0);
 		expBackOff.setMaxInterval(2000L);
 		//var errorHandler= new DefaultErrorHandler(expBackOff);
-         var errorHandler = new DefaultErrorHandler(publisherRecoverer(),fixedBackOff);
+         var errorHandler = new DefaultErrorHandler(
+        		 
+        		 //publisherRecoverer(),
+        		 consumerRecordRecoverer,
+        		 
+        		 fixedBackOff);
 		//var errorHandler= new DefaultErrorHandler(fixedBackOff);
 	    exceptionsToIgnoreList.forEach(errorHandler::addNotRetryableExceptions);
 		//exceptionsToRetryList.forEach(errorHandler::addRetryableExceptions);

@@ -34,6 +34,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+
+import com.example.apachekafka.kafkaConsumer.jpa.FailureRecordRepository;
 import com.example.apachekafka.kafkaConsumer.jpa.LibraryEventsRepository;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -66,6 +68,9 @@ public class LibraryEventsConsumerIntegrationTest {
 
     @Autowired
     LibraryEventsRepository libraryEventsRepository;
+    
+    @Autowired
+    FailureRecordRepository failureRecordRepository;
     
     @Value("${topics.retry:library-events.RETRY}")
 	private String retryTopic;
@@ -223,6 +228,27 @@ public class LibraryEventsConsumerIntegrationTest {
             System.out.println("Header Key : " + header.key() + ", Header Value : " + new String(header.value()));
         });
     }
-    
+    @Test
+    void publishModifyLibraryEvent_999_LibraryEventId_failureRecord() throws JsonProcessingException, InterruptedException, ExecutionException {
+        //given
+        Integer libraryEventId = 999;
+        String json = "{\"libraryEventId\":" + libraryEventId + ",\"libraryEventType\":\"UPDATE\",\"book\":{\"bookId\":456,\"bookName\":\"Kafka Using Spring Boot\",\"bookAuthor\":\"Dilip\"}}";
+        kafkaTemplate.sendDefault(libraryEventId, json).get();
+        //when
+        CountDownLatch latch = new CountDownLatch(1);
+        latch.await(5, TimeUnit.SECONDS);
+
+
+        verify(libraryEventsConsumerSpy, times(3)).onMessage(isA(ConsumerRecord.class));
+        verify(libraryEventsServiceSpy, times(3)).processLibraryEvent(isA(ConsumerRecord.class));
+
+
+        var failureCount = failureRecordRepository.count();
+        assertEquals(1, failureCount);
+        failureRecordRepository.findAll().forEach(failureRecord -> {
+            System.out.println("failureRecord : " + failureRecord);
+        });
+
+    }
 
 }
