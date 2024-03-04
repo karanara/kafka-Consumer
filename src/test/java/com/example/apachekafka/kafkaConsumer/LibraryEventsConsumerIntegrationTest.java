@@ -42,7 +42,7 @@ import static org.mockito.Mockito.*;
 
 
 @SpringBootTest
-@EmbeddedKafka(topics = {"library-events"} , partitions = 3)
+@EmbeddedKafka(topics = {"library-events","library-events.RETRY","library-events.DLT"} , partitions = 3)
 @TestPropertySource(properties = {"spring.kafka.producer.bootstrap-servers=${spring.embedded.kafka.brokers}"
         , "spring.kafka.consumer.bootstrap-servers=${spring.embedded.kafka.brokers}"}
         )
@@ -66,6 +66,15 @@ public class LibraryEventsConsumerIntegrationTest {
 
     @Autowired
     LibraryEventsRepository libraryEventsRepository;
+    
+    @Value("${topics.retry:library-events.RETRY}")
+	private String retryTopic;
+	
+	@Value("${topics.dlt:library-events.DLT}")
+	private String deadLetterTopic;
+	
+    private Consumer<Integer, String> consumer;
+
 
     @Autowired
     ObjectMapper objectMapper;
@@ -166,6 +175,31 @@ public class LibraryEventsConsumerIntegrationTest {
         verify(libraryEventsConsumerSpy, times(3)).onMessage(isA(ConsumerRecord.class));
         verify(libraryEventsServiceSpy, times(3)).processLibraryEvent(isA(ConsumerRecord.class));
 
+    }
+    
+    @Test
+    void publishModifyLibraryEvent_999_DeadLetterTopic_LibraryEventId() throws JsonProcessingException, InterruptedException, ExecutionException {
+        //given
+        Integer libraryEventId = 999;
+        String json = "{\"libraryEventId\":" + libraryEventId + ",\"libraryEventType\":\"UPDATE\",\"book\":{\"bookId\":456,\"bookName\":\"Kafka Using Spring Boot\",\"bookAuthor\":\"Dilip\"}}";
+        kafkaTemplate.sendDefault(libraryEventId, json).get();
+        //when
+        CountDownLatch latch = new CountDownLatch(1);
+        latch.await(5, TimeUnit.SECONDS);
+
+
+        verify(libraryEventsConsumerSpy, times(3)).onMessage(isA(ConsumerRecord.class));
+        verify(libraryEventsServiceSpy, times(3)).processLibraryEvent(isA(ConsumerRecord.class));
+
+        Map<String, Object> configs = new HashMap<>(KafkaTestUtils.consumerProps("group1", "true", embeddedKafkaBroker));
+        consumer = new DefaultKafkaConsumerFactory<>(configs, new IntegerDeserializer(), new StringDeserializer()).createConsumer();
+        embeddedKafkaBroker.consumeFromAnEmbeddedTopic(consumer, retryTopic);
+
+        ConsumerRecord<Integer, String> consumerRecord = KafkaTestUtils.getSingleRecord(consumer, retryTopic);
+
+        System.out.println("consumer Record in deadletter topic : " + consumerRecord.value());
+
+        assertEquals(json, consumerRecord.value());
     }
     
 

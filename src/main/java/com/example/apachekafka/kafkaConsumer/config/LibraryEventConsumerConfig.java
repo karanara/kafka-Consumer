@@ -2,13 +2,18 @@ package com.example.apachekafka.kafkaConsumer.config;
 
 import java.util.List;
 
+import org.apache.kafka.common.TopicPartition;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.kafka.ConcurrentKafkaListenerContainerFactoryConfigurer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.dao.RecoverableDataAccessException;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.ConsumerFactory;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.listener.CommonErrorHandler;
+import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.support.ExponentialBackOffWithMaxRetries;
 import org.springframework.util.backoff.FixedBackOff;
@@ -18,6 +23,31 @@ import lombok.extern.slf4j.Slf4j;
 @Configuration
 @Slf4j
 public class LibraryEventConsumerConfig {
+	
+	@Autowired
+	KafkaTemplate kafkaTemplate;
+	
+	@Value("${topics.retry:library-events.RETRY}")
+	private String retryTopic;
+	
+	@Value("${topics.dlt:library-events.DLT}")
+	private String deadLetterTopic;
+	
+	public DeadLetterPublishingRecoverer publisherRecoverer() {
+		 DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(kafkaTemplate
+	                , (r, e) -> {
+	            log.error("Exception in publishingRecoverer : {} ", e.getMessage(), e);
+	            if (e.getCause() instanceof RecoverableDataAccessException) {
+	                return new TopicPartition(retryTopic, r.partition());
+	            } else {
+	                return new TopicPartition(deadLetterTopic, r.partition());
+	            }
+	        }
+	        );
+
+	        return recoverer;
+
+	}
 
 	@Bean
 	ConcurrentKafkaListenerContainerFactory<?,?> kafkaListenerConainerFactory(
@@ -42,8 +72,8 @@ public class LibraryEventConsumerConfig {
 		expBackOff.setInitialInterval(1000L);
 		expBackOff.setMultiplier(2.0);
 		expBackOff.setMaxInterval(2000L);
-		var errorHandler= new DefaultErrorHandler(expBackOff);
-
+		//var errorHandler= new DefaultErrorHandler(expBackOff);
+         var errorHandler = new DefaultErrorHandler(publisherRecoverer(),fixedBackOff);
 		//var errorHandler= new DefaultErrorHandler(fixedBackOff);
 	    //exceptionsToIgnoreList.forEach(errorHandler::addNotRetryableExceptions);
 		exceptionsToRetryList.forEach(errorHandler::addRetryableExceptions);
