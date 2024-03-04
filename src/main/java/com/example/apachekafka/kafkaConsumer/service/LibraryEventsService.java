@@ -3,6 +3,7 @@ package com.example.apachekafka.kafkaConsumer.service;
 import java.util.Optional;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.RecoverableDataAccessException;
 import org.springframework.stereotype.Service;
 
 import com.example.apachekafka.kafkaConsumer.entity.LibraryEvent;
@@ -25,6 +26,9 @@ public class LibraryEventsService {
         LibraryEvent libraryEvent = objectMapper.readValue(consumerRecord.value(), LibraryEvent.class);
         log.info("libraryEvent : {} ", libraryEvent);
 
+        if(libraryEvent!=null && libraryEvent.getLibraryEventId()==999) {
+        	throw new RecoverableDataAccessException("Temporary Network issue");
+        }
         switch(libraryEvent.getLibraryEventType()){
             case NEW:
                 save(libraryEvent);
