@@ -44,7 +44,7 @@ import static org.mockito.Mockito.*;
 @SpringBootTest
 @EmbeddedKafka(topics = {"library-events","library-events.RETRY","library-events.DLT"} , partitions = 3)
 @TestPropertySource(properties = {"spring.kafka.producer.bootstrap-servers=${spring.embedded.kafka.brokers}"
-        , "spring.kafka.consumer.bootstrap-servers=${spring.embedded.kafka.brokers}"}
+        , "spring.kafka.consumer.bootstrap-servers=${spring.embedded.kafka.brokers}","retryListener.startup=false"}
         )
 public class LibraryEventsConsumerIntegrationTest {
 
@@ -82,9 +82,15 @@ public class LibraryEventsConsumerIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        for (MessageListenerContainer messageListenerContainer : endpointRegistry.getListenerContainers()) {
-            ContainerTestUtils.waitForAssignment(messageListenerContainer, embeddedKafkaBroker.getPartitionsPerTopic());
-        }
+    	//for one particular consumer 
+    	var container = endpointRegistry.getListenerContainers()
+                .stream().filter(messageListenerContainer ->
+                        Objects.equals(messageListenerContainer.getGroupId(), "library-events-listener-group"))
+                .collect(Collectors.toList()).get(0);
+    	ContainerTestUtils.waitForAssignment(container,embeddedKafkaBroker.getPartitionsPerTopic());
+        //for (MessageListenerContainer messageListenerContainer : endpointRegistry.getListenerContainers()) {
+          //  ContainerTestUtils.waitForAssignment(messageListenerContainer, embeddedKafkaBroker.getPartitionsPerTopic());
+        //}
     }
 
     @AfterEach
@@ -200,6 +206,10 @@ public class LibraryEventsConsumerIntegrationTest {
         System.out.println("consumer Record in deadletter topic : " + consumerRecord.value());
 
         assertEquals(json, consumerRecord.value());
+        consumerRecord.headers()
+        .forEach(header -> {
+            System.out.println("Header Key : " + header.key() + ", Header Value : " + new String(header.value()));
+        });
     }
     
 
