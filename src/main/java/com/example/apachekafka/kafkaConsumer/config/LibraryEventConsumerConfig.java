@@ -9,7 +9,10 @@ import org.springframework.kafka.listener.CommonErrorHandler;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.util.backoff.FixedBackOff;
 
+import lombok.extern.slf4j.Slf4j;
+
 @Configuration
+@Slf4j
 public class LibraryEventConsumerConfig {
 
 	@Bean
@@ -29,6 +32,13 @@ public class LibraryEventConsumerConfig {
 		// TODO Auto-generated method stub
 		var fixedBackOff = new FixedBackOff(1000L,2);
 		
-		return new DefaultErrorHandler(fixedBackOff);
+		var errorHandler= new DefaultErrorHandler(fixedBackOff);
+	    errorHandler.setRetryListeners(
+	    		((record,ex,deliveryAttempt)->{
+	    			log.info("Failed Record in Retry Listener,Exception :{},deliveryAttempt: {}",ex.getMessage(),deliveryAttempt);
+	    		})
+	    		
+	    		);
+	    return errorHandler;
 	}
 }
