@@ -134,7 +134,7 @@ public class LibraryEventsConsumerIntegrationTest {
         //publish the update LibraryEvent
 
         Book updatedBook = Book.builder().
-                bookId(456).bookName("Kafka Using Spring Boot 2.x").bookAuthor("Dilip").build();
+                bookId(456).bookName("Kafka Using Spring Boot Ramya").bookAuthor("Dilip").build();
         libraryEvent.setLibraryEventType(LibraryEventType.UPDATE);
         libraryEvent.setBook(updatedBook);
         String updatedJson = objectMapper.writeValueAsString(libraryEvent);
@@ -148,7 +148,7 @@ public class LibraryEventsConsumerIntegrationTest {
         //verify(libraryEventsConsumerSpy, times(1)).onMessage(isA(ConsumerRecord.class));
         //verify(libraryEventsServiceSpy, times(1)).processLibraryEvent(isA(ConsumerRecord.class));
         LibraryEvent persistedLibraryEvent = libraryEventsRepository.findById(libraryEvent.getLibraryEventId()).get();
-        assertEquals("Kafka Using Spring Boot 2.x", persistedLibraryEvent.getBook().getBookName());
+        assertEquals("Kafka Using Spring Boot Ramya", persistedLibraryEvent.getBook().getBookName());
     }
 
 
@@ -165,7 +165,19 @@ public class LibraryEventsConsumerIntegrationTest {
 
         verify(libraryEventsConsumerSpy, times(0)).onMessage(isA(ConsumerRecord.class));
         verify(libraryEventsServiceSpy, times(0)).processLibraryEvent(isA(ConsumerRecord.class));
+        Map<String, Object> configs = new HashMap<>(KafkaTestUtils.consumerProps("group2", "true", embeddedKafkaBroker));
+        consumer = new DefaultKafkaConsumerFactory<>(configs, new IntegerDeserializer(), new StringDeserializer()).createConsumer();
+        embeddedKafkaBroker.consumeFromAnEmbeddedTopic(consumer, deadLetterTopic);
 
+        ConsumerRecord<Integer, String> consumerRecord = KafkaTestUtils.getSingleRecord(consumer, deadLetterTopic);
+
+        System.out.println("consumer Record in deadletter topic : " + consumerRecord.value());
+        
+        assertEquals(json, consumerRecord.value());
+        consumerRecord.headers()
+                .forEach(header -> {
+                    System.out.println("Header Key : " + header.key() + ", Header Value : " + new String(header.value()));
+                });
     }
     @Test
     void publishModifyLibraryEvent_999_LibraryEventId() throws JsonProcessingException, InterruptedException, ExecutionException {
@@ -184,7 +196,7 @@ public class LibraryEventsConsumerIntegrationTest {
     }
     
     @Test
-    void publishModifyLibraryEvent_999_DeadLetterTopic_LibraryEventId() throws JsonProcessingException, InterruptedException, ExecutionException {
+    void publishModifyLibraryEvent_999_retryTopic_LibraryEventId() throws JsonProcessingException, InterruptedException, ExecutionException {
         //given
         Integer libraryEventId = 999;
         String json = "{\"libraryEventId\":" + libraryEventId + ",\"libraryEventType\":\"UPDATE\",\"book\":{\"bookId\":456,\"bookName\":\"Kafka Using Spring Boot\",\"bookAuthor\":\"Dilip\"}}";
@@ -203,7 +215,7 @@ public class LibraryEventsConsumerIntegrationTest {
 
         ConsumerRecord<Integer, String> consumerRecord = KafkaTestUtils.getSingleRecord(consumer, retryTopic);
 
-        System.out.println("consumer Record in deadletter topic : " + consumerRecord.value());
+        System.out.println("consumer Record in retry topic : " + consumerRecord.value());
 
         assertEquals(json, consumerRecord.value());
         consumerRecord.headers()

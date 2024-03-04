@@ -75,8 +75,8 @@ public class LibraryEventConsumerConfig {
 		//var errorHandler= new DefaultErrorHandler(expBackOff);
          var errorHandler = new DefaultErrorHandler(publisherRecoverer(),fixedBackOff);
 		//var errorHandler= new DefaultErrorHandler(fixedBackOff);
-	    //exceptionsToIgnoreList.forEach(errorHandler::addNotRetryableExceptions);
-		exceptionsToRetryList.forEach(errorHandler::addRetryableExceptions);
+	    exceptionsToIgnoreList.forEach(errorHandler::addNotRetryableExceptions);
+		//exceptionsToRetryList.forEach(errorHandler::addRetryableExceptions);
 	    errorHandler.setRetryListeners(
 	    		((record,ex,deliveryAttempt)->{
 	    			log.info("Failed Record in Retry Listener,Exception :{},deliveryAttempt: {}",ex.getMessage(),deliveryAttempt);
