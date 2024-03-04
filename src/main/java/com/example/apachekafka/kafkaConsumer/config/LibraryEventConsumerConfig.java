@@ -10,6 +10,7 @@ import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.listener.CommonErrorHandler;
 import org.springframework.kafka.listener.DefaultErrorHandler;
+import org.springframework.kafka.support.ExponentialBackOffWithMaxRetries;
 import org.springframework.util.backoff.FixedBackOff;
 
 import lombok.extern.slf4j.Slf4j;
@@ -36,7 +37,14 @@ public class LibraryEventConsumerConfig {
 		var exceptionsToIgnoreList= List.of(IllegalArgumentException.class);
 		var exceptionsToRetryList=List.of(RecoverableDataAccessException.class);
 		var fixedBackOff = new FixedBackOff(1000L,2);
-		var errorHandler= new DefaultErrorHandler(fixedBackOff);
+		
+		var expBackOff = new ExponentialBackOffWithMaxRetries(2);
+		expBackOff.setInitialInterval(1000L);
+		expBackOff.setMultiplier(2.0);
+		expBackOff.setMaxInterval(2000L);
+		var errorHandler= new DefaultErrorHandler(expBackOff);
+
+		//var errorHandler= new DefaultErrorHandler(fixedBackOff);
 	    //exceptionsToIgnoreList.forEach(errorHandler::addNotRetryableExceptions);
 		exceptionsToRetryList.forEach(errorHandler::addRetryableExceptions);
 	    errorHandler.setRetryListeners(
